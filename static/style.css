@@ -1,0 +1,136 @@
+/* ==============================
+   General Page Styling
+   ============================== */
+
+body {
+    font-family: Arial, sans-serif;
+    margin: 40px;
+    background-color: #f4f6f8;
+    color: #333;
+}
+
+
+/* ==============================
+   Main Heading
+   ============================== */
+
+h1 {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+
+/* ==============================
+   Section Headings
+   ============================== */
+
+h2 {
+    margin-top: 25px;
+}
+
+
+/* Center Add / Update heading */
+
+.form-title {
+    text-align: center;
+    margin-top: 25px;
+    margin-bottom: 20px;
+}
+
+
+/* ==============================
+   Product Form
+   ============================== */
+
+form {
+    background-color: white;
+    padding: 20px;
+    width: 400px;
+    margin: 0 auto 30px auto;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+
+/* ==============================
+   Labels
+   ============================== */
+
+label {
+    display: inline-block;
+    width: 100px;
+    font-weight: bold;
+}
+
+
+/* ==============================
+   Input Fields
+   ============================== */
+
+input {
+    padding: 8px;
+    width: 220px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+
+/* ==============================
+   Buttons
+   ============================== */
+
+button {
+    padding: 8px 15px;
+    margin: 5px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    background-color: #007bff;
+    color: white;
+}
+
+
+/* Button Hover */
+
+button:hover {
+    opacity: 0.85;
+}
+
+
+/* ==============================
+   Horizontal Line
+   ============================== */
+
+hr {
+    margin: 30px 0;
+}
+
+
+/* ==============================
+   Product Table
+   ============================== */
+
+table {
+    width: 100%;
+    background-color: white;
+    border-collapse: collapse;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+
+/* Table Cells */
+
+th,
+td {
+    padding: 12px;
+    text-align: center;
+    border: 1px solid #ddd;
+}
+
+
+/* Table Header */
+
+th {
+    background-color: #e9ecef;
+    font-weight: bold;
+}
