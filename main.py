@@ -3,8 +3,8 @@ from pydantic import BaseModel
 import mysql.connector
 import os
 from dotenv import load_dotenv
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 
 
 # Load environment variables from .env
@@ -22,6 +22,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 
+# Home page
 @app.get("/")
 def home(request: Request):
     return templates.TemplateResponse(
@@ -30,18 +31,16 @@ def home(request: Request):
     )
 
 
-# Aiven MySQL Connection
+# MySQL Connection
 conn = mysql.connector.connect(
     host=os.getenv("DB_HOST"),
     port=int(os.getenv("DB_PORT")),
     user=os.getenv("DB_USER"),
     password=os.getenv("DB_PASSWORD"),
-    database=os.getenv("DB_NAME"),
-    ssl_ca="ca.pem",
-    ssl_verify_cert=True
+    database=os.getenv("DB_NAME")
 )
 
-print("Aiven MySQL Connected Successfully")
+print("MySQL Connected Successfully")
 
 
 # Product Model
@@ -73,8 +72,9 @@ def get_product(product_id: int):
     cursor = conn.cursor(dictionary=True)
 
     query = """
-    SELECT * FROM products
-    WHERE product_id = %s
+        SELECT *
+        FROM products
+        WHERE product_id = %s
     """
 
     cursor.execute(query, (product_id,))
@@ -96,9 +96,9 @@ def create_product(product: Product):
     cursor = conn.cursor()
 
     query = """
-    INSERT INTO products
-    (product_name, sell_price, quantity)
-    VALUES (%s, %s, %s)
+        INSERT INTO products
+        (product_name, sell_price, quantity)
+        VALUES (%s, %s, %s)
     """
 
     values = (
@@ -128,11 +128,11 @@ def update_product(product_id: int, product: Product):
     cursor = conn.cursor()
 
     query = """
-    UPDATE products
-    SET product_name = %s,
-        sell_price = %s,
-        quantity = %s
-    WHERE product_id = %s
+        UPDATE products
+        SET product_name = %s,
+            sell_price = %s,
+            quantity = %s
+        WHERE product_id = %s
     """
 
     values = (
@@ -165,8 +165,8 @@ def delete_product(product_id: int):
     cursor = conn.cursor()
 
     query = """
-    DELETE FROM products
-    WHERE product_id = %s
+        DELETE FROM products
+        WHERE product_id = %s
     """
 
     cursor.execute(query, (product_id,))

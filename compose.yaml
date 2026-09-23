@@ -1,0 +1,43 @@
+services:
+
+  db:
+    image: mysql:8.4
+    container_name: inventory-db
+    restart: unless-stopped
+
+    environment:
+      MYSQL_DATABASE: myinventory_db
+      MYSQL_USER: myinventory
+      MYSQL_PASSWORD: MyInventory@123
+      MYSQL_ROOT_PASSWORD: RootPassword@123
+
+    ports:
+      - "3307:3306"
+
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    container_name: inventory-api
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    ports:
+      - "8000:8000"
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  mysql_data:
