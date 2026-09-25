@@ -7,10 +7,11 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
 
-# Load environment variables from .env
+# Load environment variables
 load_dotenv()
 
 
+# Create FastAPI app
 app = FastAPI()
 
 
@@ -31,16 +32,21 @@ def home(request: Request):
     )
 
 
-# MySQL Connection
+# MySQL Connection - Aiven
 conn = mysql.connector.connect(
     host=os.getenv("DB_HOST"),
     port=int(os.getenv("DB_PORT")),
     user=os.getenv("DB_USER"),
     password=os.getenv("DB_PASSWORD"),
-    database=os.getenv("DB_NAME")
+    database=os.getenv("DB_NAME"),
+
+    # Aiven requires SSL
+    ssl_disabled=False,
+    ssl_verify_cert=False,
+    ssl_verify_identity=False
 )
 
-print("MySQL Connected Successfully")
+print("Aiven MySQL Connected Successfully")
 
 
 # Product Model
@@ -86,7 +92,9 @@ def get_product(product_id: int):
     if product:
         return product
 
-    return {"message": "Product not found"}
+    return {
+        "message": "Product not found"
+    }
 
 
 # POST - Create Product
@@ -147,8 +155,12 @@ def update_product(product_id: int, product: Product):
     conn.commit()
 
     if cursor.rowcount == 0:
+
         cursor.close()
-        return {"message": "Product not found"}
+
+        return {
+            "message": "Product not found"
+        }
 
     cursor.close()
 
@@ -174,8 +186,12 @@ def delete_product(product_id: int):
     conn.commit()
 
     if cursor.rowcount == 0:
+
         cursor.close()
-        return {"message": "Product not found"}
+
+        return {
+            "message": "Product not found"
+        }
 
     cursor.close()
 
