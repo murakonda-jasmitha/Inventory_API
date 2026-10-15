@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+    <title>Register - Inventory Management</title>
+
+    <link rel="stylesheet" href="/static/style.css">
+
+</head>
+
+<body>
+
+    <div class="auth-box">
+
+        <h1>Inventory Management System</h1>
+
+        <h2>Create Account</h2>
+
+
+        <form id="registerForm">
+
+            <label>Username:</label>
+
+            <input
+                type="text"
+                id="registerUsername"
+                required
+            >
+
+            <br><br>
+
+
+            <label>Password:</label>
+
+            <input
+                type="password"
+                id="registerPassword"
+                required
+            >
+
+            <br><br>
+
+
+            <button type="submit">
+                Register
+            </button>
+
+        </form>
+
+
+        <p id="registerMessage"></p>
+
+
+        <hr>
+
+
+        <p>
+            Already have an account?
+        </p>
+
+
+        <button
+            type="button"
+            id="backToLoginButton"
+        >
+            Back to Login
+        </button>
+
+    </div>
+
+
+    <script>
+
+        // ==========================================
+        // REGISTRATION
+        // ==========================================
+
+        document
+            .getElementById("registerForm")
+            .addEventListener(
+                "submit",
+                async function(event) {
+
+                    event.preventDefault();
+
+
+                    const username =
+                        document
+                            .getElementById(
+                                "registerUsername"
+                            )
+                            .value
+                            .trim();
+
+
+                    const password =
+                        document
+                            .getElementById(
+                                "registerPassword"
+                            )
+                            .value;
+
+
+                    const message =
+                        document
+                            .getElementById(
+                                "registerMessage"
+                            );
+
+
+                    message.textContent =
+                        "Creating account...";
+
+
+                    try {
+
+                        const response =
+                            await fetch(
+                                "/register",
+                                {
+                                    method: "POST",
+
+                                    headers: {
+                                        "Content-Type":
+                                            "application/json"
+                                    },
+
+                                    body: JSON.stringify({
+                                        username: username,
+                                        password: password
+                                    })
+                                }
+                            );
+
+
+                        const data =
+                            await response.json();
+
+
+                        // Registration failed
+                        if (!response.ok) {
+
+                            message.textContent =
+                                data.detail ||
+                                "Registration failed.";
+
+                            return;
+                        }
+
+
+                        // Registration successful
+                        message.textContent =
+                            "Registration successful!";
+
+
+                        document
+                            .getElementById(
+                                "registerForm"
+                            )
+                            .reset();
+
+
+                        // Go to login
+                        setTimeout(
+                            function() {
+
+                                window.location.href =
+                                    "/login-page";
+
+                            },
+                            1000
+                        );
+
+
+                    } catch(error) {
+
+                        console.error(error);
+
+                        message.textContent =
+                            "Unable to connect to server.";
+
+                    }
+
+                }
+            );
+
+
+        // ==========================================
+        // BACK TO LOGIN
+        // ==========================================
+
+        document
+            .getElementById("backToLoginButton")
+            .addEventListener(
+                "click",
+                function() {
+
+                    window.location.href =
+                        "/login-page";
+
+                }
+            );
+
+    </script>
+
+</body>
+
+</html> 
