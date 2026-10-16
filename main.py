@@ -9,6 +9,12 @@ from fastapi import (
 from pydantic import BaseModel
 import mysql.connector
 import os
+import re
+import secrets
+import hashlib
+import smtplib
+from email.message import EmailMessage
+from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
 from fastapi.templating import Jinja2Templates
@@ -149,80 +155,200 @@ class Product(BaseModel):
 
 
 # ============================================================
-# USER REGISTRATION MODEL
+# REGISTRATION MODELS AND EMAIL OTP HELPERS
 # ============================================================
 
 class UserRegister(BaseModel):
-
+    full_name: str
     username: str
+    email: str
+    phone: str
     password: str
 
 
-# ============================================================
-# REGISTER USER
-# ============================================================
+class VerifyRegistrationOTP(BaseModel):
+    email: str
+    otp: str
 
-@app.post("/register")
-def register_user(user: UserRegister):
 
-    cursor = conn.cursor(dictionary=True)
-
-    # Check whether username already exists
-    cursor.execute(
-        """
-        SELECT id, username
-        FROM users
-        WHERE username = %s
-        """,
-        (user.username,)
-    )
-
-    existing_user = cursor.fetchone()
-
-    if existing_user:
-
-        cursor.close()
-
+def validate_password(password: str) -> None:
+    if (
+        len(password) < 8
+        or not re.search(r"[A-Z]", password)
+        or not re.search(r"[a-z]", password)
+        or not re.search(r"[0-9]", password)
+        or not re.search(r"[^A-Za-z0-9]", password)
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username already exists"
+            detail=(
+                "Password must be at least 8 characters long and contain "
+                "an uppercase letter, a lowercase letter, a number, "
+                "and a special character."
+            ),
         )
 
-    # Hash password
-    hashed_password = hash_password(
-        user.password
+
+def send_otp_email(email: str, otp: str) -> None:
+    sender = os.getenv("EMAIL_ADDRESS")
+    app_password = os.getenv("EMAIL_APP_PASSWORD")
+    if not sender or not app_password:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Email service is not configured. Check EMAIL_ADDRESS and EMAIL_APP_PASSWORD.",
+        )
+
+    message = EmailMessage()
+    message["Subject"] = "Inventory Management - Email Verification OTP"
+    message["From"] = sender
+    message["To"] = email
+    message.set_content(
+        f"Your Inventory Management System verification code is {otp}. "
+        "It expires in 5 minutes. If you did not request this, ignore this email."
     )
 
-    # New users are ALWAYS normal users
-    query = """
-        INSERT INTO users
-        (username, password_hash, role)
-        VALUES (%s, %s, %s)
-    """
+    try:
+        # Gmail SMTP SSL. The timeout prevents the browser from waiting indefinitely.
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=20) as server:
+            server.login(sender, app_password.replace(" ", ""))
+            server.send_message(message)
+    except (smtplib.SMTPException, OSError) as exc:
+        print("OTP email delivery failed:", type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not send the verification email. Check Gmail App Password and SMTP access.",
+        )
 
-    values = (
-        user.username,
-        hashed_password,
-        "user"
-    )
 
-    cursor.execute(
-        query,
-        values
-    )
+# ============================================================
+# STEP 1 - SEND REGISTRATION OTP
+# ============================================================
 
-    conn.commit()
+@app.post("/register/send-otp")
+def send_registration_otp(user: UserRegister):
+    full_name = user.full_name.strip()
+    username = user.username.strip()
+    email = user.email.strip().lower()
+    phone = user.phone.strip()
+    password = user.password
 
-    new_id = cursor.lastrowid
+    if not full_name or not username or not phone:
+        raise HTTPException(status_code=400, detail="Please fill in all required fields.")
+    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
+        raise HTTPException(status_code=400, detail="Enter a valid email address.")
+    if not re.fullmatch(r"[0-9+()\- ]{7,20}", phone):
+        raise HTTPException(status_code=400, detail="Enter a valid phone number.")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{3,50}", username):
+        raise HTTPException(status_code=400, detail="Username must be 3-50 characters using letters, numbers, dots, underscores, or hyphens.")
+    validate_password(password)
 
-    cursor.close()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT id FROM users WHERE username = %s OR email = %s",
+            (username, email),
+        )
+        if cursor.fetchone():
+            raise HTTPException(status_code=400, detail="Username or email is already registered.")
 
-    return {
-        "message": "User registered successfully",
-        "user_id": new_id,
-        "username": user.username,
-        "role": "user"
-    }
+        # Replace any existing pending attempt for this username or email.
+        cursor.execute(
+            "DELETE FROM pending_registrations WHERE username = %s OR email = %s",
+            (username, email),
+        )
+
+        otp = f"{secrets.randbelow(1_000_000):06d}"
+        otp_hash = hashlib.sha256(otp.encode("utf-8")).hexdigest()
+        password_hash = hash_password(password)
+        expires_at = datetime.utcnow() + timedelta(minutes=5)
+
+        cursor.execute(
+            """INSERT INTO pending_registrations
+               (full_name, username, email, phone, password_hash, otp_hash, expires_at, attempts)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, 0)""",
+            (full_name, username, email, phone, password_hash, otp_hash, expires_at),
+        )
+        conn.commit()
+
+        try:
+            send_otp_email(email, otp)
+        except HTTPException:
+            cursor.execute("DELETE FROM pending_registrations WHERE email = %s", (email,))
+            conn.commit()
+            raise
+
+        return {"message": "OTP sent to your email. It expires in 5 minutes.", "email": email}
+    except mysql.connector.IntegrityError:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail="Username or email is already pending registration.")
+    finally:
+        cursor.close()
+
+
+# ============================================================
+# STEP 2 - VERIFY OTP AND CREATE ACCOUNT
+# ============================================================
+
+@app.post("/register/verify-otp")
+def verify_registration_otp(data: VerifyRegistrationOTP):
+    email = data.email.strip().lower()
+    otp = data.otp.strip()
+    if not re.fullmatch(r"[0-9]{6}", otp):
+        raise HTTPException(status_code=400, detail="Enter the six-digit OTP.")
+
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT * FROM pending_registrations WHERE email = %s",
+            (email,),
+        )
+        pending = cursor.fetchone()
+        if not pending:
+            raise HTTPException(status_code=400, detail="No pending registration found. Request a new OTP.")
+
+        expires_at = pending["expires_at"]
+        # MySQL drivers may return a naive datetime; compare as naive UTC consistently.
+        if expires_at <= datetime.utcnow():
+            cursor.execute("DELETE FROM pending_registrations WHERE email = %s", (email,))
+            conn.commit()
+            raise HTTPException(status_code=400, detail="OTP expired. Please register again to request a new OTP.")
+
+        if pending["attempts"] >= 5:
+            cursor.execute("DELETE FROM pending_registrations WHERE email = %s", (email,))
+            conn.commit()
+            raise HTTPException(status_code=400, detail="Too many incorrect attempts. Please register again.")
+
+        supplied_hash = hashlib.sha256(otp.encode("utf-8")).hexdigest()
+        if not secrets.compare_digest(supplied_hash, pending["otp_hash"]):
+            cursor.execute(
+                "UPDATE pending_registrations SET attempts = attempts + 1 WHERE email = %s",
+                (email,),
+            )
+            conn.commit()
+            raise HTTPException(status_code=400, detail="Incorrect OTP. Please try again.")
+
+        cursor.execute(
+            """INSERT INTO users (username, password_hash, role, full_name, email, phone)
+               VALUES (%s, %s, %s, %s, %s, %s)""",
+            (
+                pending["username"], pending["password_hash"], "user",
+                pending["full_name"], pending["email"], pending["phone"],
+            ),
+        )
+        new_id = cursor.lastrowid
+        cursor.execute("DELETE FROM pending_registrations WHERE email = %s", (email,))
+        conn.commit()
+        return {
+            "message": "Email verified and account created successfully. You can now log in.",
+            "user_id": new_id,
+            "username": pending["username"],
+            "role": "user",
+        }
+    except mysql.connector.IntegrityError:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail="Username or email is already registered.")
+    finally:
+        cursor.close()
 
 
 # ============================================================
